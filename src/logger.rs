@@ -3,7 +3,6 @@ use crate::formatter::{Formatter, JsonFormatter, PrettyFormatter};
 use crate::output::{Output, StdoutOutput};
 use chrono::Utc;
 use serde_json::{Map, Value};
-use std::sync::Arc;
 
 /// Main façade that **users interact with**.  A logger is cheap to clone because it only
 /// contains a couple of `Arc`s/`Box`es, so feel free to pass it around.
