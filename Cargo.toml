@@ -9,7 +9,7 @@ repository = "https://github.com/DitzDev/Cappie"
 homepage = "https://github.com/DitzDev/Cappie"
 readme = "README.md"
 keywords = ["logger", "interactive", "json"]
-categories = ["logger::json"]
+categories = ["command-line-interface", "command-line-utilities"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
