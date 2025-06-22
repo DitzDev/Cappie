@@ -30,3 +30,7 @@ path = "example/pretty.rs"
 [[example]]
 name = "custom"
 path = "example/custom.rs"
+
+[[example]]
+name = "flexible"
+path = "example/flexible.rs"

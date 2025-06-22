@@ -20,7 +20,6 @@ pub trait Formatter: Send + Sync {
     fn format(&self, level: Level, msg: &str, fields: &Map<String, Value>, timestamp: DateTime<Utc>, name: &str) -> String;
 }
 
-
 /// Serialises a record to **newline‑delimited JSON (ND‑JSON)** – perfectly suited for
 /// machine ingestion.  All user‑supplied fields are flattened into the top‑level object so
 /// they can be queried without additional object navigation.
@@ -52,6 +51,295 @@ impl Formatter for JsonFormatter {
         }
         
         serde_json::to_string(&log_entry).unwrap_or_default()
+    }
+}
+
+/// Defines the position of different components in the log output
+#[derive(Debug, Clone, PartialEq)]
+#[derive(Hash)]
+#[derive(Eq)]
+pub enum ComponentPosition {
+    /// Component appears before everything else
+    Start,
+    /// Component appears after timestamp
+    AfterTime,
+    /// Component appears after logger name
+    AfterName,
+    /// Component appears after level
+    AfterLevel,
+    /// Component appears after message
+    AfterMessage,
+    /// Component appears at the end
+    End,
+}
+
+/// Represents a template token that can be positioned and styled
+#[derive(Debug, Clone)]
+pub struct TemplateComponent {
+    /// The type of component
+    pub component_type: ComponentType,
+    /// Position in the output
+    pub position: ComponentPosition,
+    /// Optional color for this component
+    pub color: Option<String>,
+    /// Optional prefix (e.g., "[" for timestamp)
+    pub prefix: Option<String>,
+    /// Optional suffix (e.g., "]" for timestamp)
+    pub suffix: Option<String>,
+}
+
+/// Types of components that can be included in log output
+#[derive(Debug, Clone, PartialEq)]
+pub enum ComponentType {
+    Timestamp,
+    LoggerName,
+    Level,
+    Message,
+    Fields,
+    CustomText(String),
+}
+
+/// A highly flexible formatter that allows complete customization of log output format
+///
+/// Users can define exactly how they want their logs to appear by:
+/// * Positioning components anywhere in the output
+/// * Adding custom colors to any component
+/// * Adding prefixes and suffixes (brackets, parentheses, etc.)
+/// * Including custom text at any position
+/// * Controlling timestamp format
+///
+/// # Examples
+///
+/// Default format: `[12:34:56] (logger) INFO: message key=value`
+/// ```rust
+/// let formatter = FlexibleFormatter::new();
+/// ```
+///
+/// Custom format: `message INFO [12:34:56]: fields`
+/// ```rust
+/// let formatter = FlexibleFormatter::new()
+///     .clear_components()
+///     .add_component(ComponentType::Message, ComponentPosition::Start, None, None, None)
+///     .add_component(ComponentType::Level, ComponentPosition::AfterMessage, Some("\x1b[31m".to_string()), Some(" ".to_string()), None)
+///     .add_component(ComponentType::Timestamp, ComponentPosition::AfterLevel, None, Some(" [".to_string()), Some("]".to_string()))
+///     .add_component(ComponentType::CustomText(": ".to_string()), ComponentPosition::AfterTime, None, None, None)
+///     .add_component(ComponentType::Fields, ComponentPosition::End, None, None, None);
+/// ```
+pub struct FlexibleFormatter {
+    pub time_format: String,
+    pub reset_color: String,
+    pub components: Vec<TemplateComponent>,
+}
+
+impl Default for FlexibleFormatter {
+    fn default() -> Self {
+        let mut components = Vec::new();
+        
+        // Default format: [HH:mm:SS] (name) LEVEL: message fields
+        components.push(TemplateComponent {
+            component_type: ComponentType::Timestamp,
+            position: ComponentPosition::Start,
+            color: None,
+            prefix: Some("[".to_string()),
+            suffix: Some("]".to_string()),
+        });
+        
+        components.push(TemplateComponent {
+            component_type: ComponentType::LoggerName,
+            position: ComponentPosition::AfterTime,
+            color: None,
+            prefix: Some(" (".to_string()),
+            suffix: Some(")".to_string()),
+        });
+        
+        components.push(TemplateComponent {
+            component_type: ComponentType::Level,
+            position: ComponentPosition::AfterName,
+            color: None,
+            prefix: Some(" ".to_string()),
+            suffix: None,
+        });
+        
+        components.push(TemplateComponent {
+            component_type: ComponentType::CustomText(":".to_string()),
+            position: ComponentPosition::AfterLevel,
+            color: None,
+            prefix: None,
+            suffix: None,
+        });
+        
+        components.push(TemplateComponent {
+            component_type: ComponentType::Message,
+            position: ComponentPosition::AfterLevel,
+            color: None,
+            prefix: Some(" ".to_string()),
+            suffix: None,
+        });
+        
+        components.push(TemplateComponent {
+            component_type: ComponentType::Fields,
+            position: ComponentPosition::End,
+            color: None,
+            prefix: Some(" ".to_string()),
+            suffix: None,
+        });
+        
+        Self {
+            time_format: "%H:%M:%S".to_string(),
+            reset_color: "\x1b[0m".to_string(),
+            components,
+        }
+    }
+}
+
+impl FlexibleFormatter {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
+    /// Set the timestamp format
+    pub fn with_time_format(mut self, format: &str) -> Self {
+        self.time_format = format.to_string();
+        self
+    }
+    
+    /// Clear all components (start with empty formatter)
+    pub fn clear_components(mut self) -> Self {
+        self.components.clear();
+        self
+    }
+    
+    /// Add a component to the formatter
+    pub fn add_component(
+        mut self, 
+        component_type: ComponentType, 
+        position: ComponentPosition,
+        color: Option<String>,
+        prefix: Option<String>,
+        suffix: Option<String>
+    ) -> Self {
+        self.components.push(TemplateComponent {
+            component_type,
+            position,
+            color,
+            prefix,
+            suffix,
+        });
+        self
+    }
+    
+    /// Add a timestamp component
+    pub fn add_timestamp(self, position: ComponentPosition, color: Option<String>, prefix: Option<String>, suffix: Option<String>) -> Self {
+        self.add_component(ComponentType::Timestamp, position, color, prefix, suffix)
+    }
+    
+    /// Add a logger name component
+    pub fn add_logger_name(self, position: ComponentPosition, color: Option<String>, prefix: Option<String>, suffix: Option<String>) -> Self {
+        self.add_component(ComponentType::LoggerName, position, color, prefix, suffix)
+    }
+    
+    /// Add a level component
+    pub fn add_level(self, position: ComponentPosition, color: Option<String>, prefix: Option<String>, suffix: Option<String>) -> Self {
+        self.add_component(ComponentType::Level, position, color, prefix, suffix)
+    }
+    
+    /// Add a message component
+    pub fn add_message(self, position: ComponentPosition, color: Option<String>, prefix: Option<String>, suffix: Option<String>) -> Self {
+        self.add_component(ComponentType::Message, position, color, prefix, suffix)
+    }
+    
+    /// Add a fields component
+    pub fn add_fields(self, position: ComponentPosition, color: Option<String>, prefix: Option<String>, suffix: Option<String>) -> Self {
+        self.add_component(ComponentType::Fields, position, color, prefix, suffix)
+    }
+    
+    /// Add custom text
+    pub fn add_custom_text(self, text: &str, position: ComponentPosition, color: Option<String>) -> Self {
+        self.add_component(ComponentType::CustomText(text.to_string()), position, color, None, None)
+    }
+    
+    /// Disable all colors
+    pub fn with_no_colors(mut self) -> Self {
+        for component in &mut self.components {
+            component.color = None;
+        }
+        self.reset_color.clear();
+        self
+    }
+}
+
+impl Formatter for FlexibleFormatter {
+    fn format(&self, level: Level, msg: &str, fields: &Map<String, Value>, timestamp: DateTime<Utc>, name: &str) -> String {
+        let time_str = timestamp.format(&self.time_format).to_string();
+        let level_str = level.as_str();
+        let fields_str = if !fields.is_empty() {
+            fields.iter()
+                .map(|(k, v)| format!("{}={}", k, format_value(v)))
+                .collect::<Vec<_>>()
+                .join(" ")
+        } else {
+            String::new()
+        };
+        
+        // Group components by position
+        let mut positioned_components: HashMap<ComponentPosition, Vec<&TemplateComponent>> = HashMap::new();
+        for component in &self.components {
+            positioned_components.entry(component.position.clone()).or_insert_with(Vec::new).push(component);
+        }
+        
+        let mut result = String::new();
+        
+        // Process components in order
+        let positions = [
+            ComponentPosition::Start,
+            ComponentPosition::AfterTime,
+            ComponentPosition::AfterName,
+            ComponentPosition::AfterLevel,
+            ComponentPosition::AfterMessage,
+            ComponentPosition::End,
+        ];
+        
+        for position in &positions {
+            if let Some(components) = positioned_components.get(position) {
+                for component in components {
+                    let content = match &component.component_type {
+                        ComponentType::Timestamp => Some(time_str.as_str()),
+                        ComponentType::LoggerName => Some(name),
+                        ComponentType::Level => Some(level_str),
+                        ComponentType::Message => Some(msg),
+                        ComponentType::Fields => if !fields_str.is_empty() { Some(fields_str.as_str()) } else { None },
+                        ComponentType::CustomText(text) => Some(text.as_str()),
+                    };
+                    
+                    if let Some(content) = content {
+                        // Add prefix
+                        if let Some(ref prefix) = component.prefix {
+                            result.push_str(prefix);
+                        }
+                        
+                        // Add color
+                        if let Some(ref color) = component.color {
+                            result.push_str(color);
+                        }
+                        
+                        // Add content
+                        result.push_str(content);
+                        
+                        // Add reset color
+                        if component.color.is_some() && !self.reset_color.is_empty() {
+                            result.push_str(&self.reset_color);
+                        }
+                        
+                        // Add suffix
+                        if let Some(ref suffix) = component.suffix {
+                            result.push_str(suffix);
+                        }
+                    }
+                }
+            }
+        }
+        
+        result
     }
 }
 
