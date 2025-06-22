@@ -1,5 +1,10 @@
 # Cappie
 
+[![Latest Version]][crates.io]
+
+[Latest Version]: https://img.shields.io/crates/v/cappie.svg
+[crates.io]: https://crates.io/crates/cappie
+
 A fast, flexible JSON logger for Rust, inspired by Pino from Node.js.
 
 ## Features
@@ -21,6 +26,11 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 cappie = "0.1.0"
+```
+
+Or install with `cargo` for new version:
+```bash
+cargo add cappie
 ```
 
 ## Quick Start
